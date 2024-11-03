@@ -6,6 +6,7 @@ import cv2
 import json
 import hashlib
 import pickle
+import signal
 from datetime import datetime
 from camera.camera_factory import CameraFactory
 from enhanced_liveness_detector import EnhancedLivenessDetector
@@ -15,9 +16,22 @@ class FacialRecognition:
         self.use_camera = use_camera
         self.input_image = input_image
         self.known_faces_dir = known_faces_dir
+        self.headless = headless
+        self.running = True
         self.cache_file = os.path.join(known_faces_dir, "encodings_cache.pkl")
         self.metadata_file = os.path.join(known_faces_dir, "encodings_metadata.json")
         self.liveness_detector = EnhancedLivenessDetector()
+        
+        # Set up signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+        
+        # Performance settings
+        self.process_every_n_frames = 2  # Process every other frame
+        self.frame_count = 0
+        self.recognition_threshold = 0.6
+        self.target_fps = 10
+        self.frame_time = 1.0 / self.target_fps
         
         # Challenge tracking
         self.current_challenge = None
@@ -41,12 +55,12 @@ class FacialRecognition:
         self.known_face_names = []
         self.load_known_faces(self.known_faces_dir)
         
-        # Performance settings
-        self.process_every_n_frames = 1
-        self.frame_count = 0
-        self.recognition_threshold = 0.6
-        
         print("Facial Recognition System Initialized")
+        
+    def _signal_handler(self, signum, frame):
+        """Handle shutdown signals gracefully"""
+        print("\nShutdown signal received. Cleaning up...", flush=True)
+        self.running = False
     
     def _calculate_image_hash(self, image_path):
         """Calculate SHA-256 hash of an image file"""
@@ -290,41 +304,70 @@ class FacialRecognition:
     
     def _run_camera_mode(self):
         """Run facial recognition in camera mode"""
-        print("Starting camera feed...")
+        print("Starting camera feed...", flush=True)
         consecutive_failures = 0
         max_consecutive_failures = 5
+        last_frame_time = time.time()
         
-        while True:
+        while self.running:
             try:
+                # Maintain target frame rate
+                current_time = time.time()
+                elapsed = current_time - last_frame_time
+                if elapsed < self.frame_time:
+                    time.sleep(self.frame_time - elapsed)
+                
                 frame = self.camera.capture_frame()
                 consecutive_failures = 0  # Reset on successful capture
                 
                 if self.frame_count % self.process_every_n_frames == 0:
                     frame = self.process_frame(frame)
+                    
+                    if not self.headless:
+                        try:
+                            cv2.imshow('Facial Recognition', frame)
+                            if cv2.waitKey(1) & 0xFF == ord('q'):
+                                print("Quit command received", flush=True)
+                                break
+                        except Exception as e:
+                            print(f"Warning: Display error (running headless): {e}", flush=True)
+                            self.headless = True
                 
-                cv2.imshow('Facial Recognition', frame)
                 self.frame_count += 1
-                
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    print("Quit command received")
-                    break
+                last_frame_time = time.time()
                     
             except KeyboardInterrupt:
-                print("\nStopping facial recognition...")
+                print("\nStopping facial recognition...", flush=True)
                 break
                 
             except Exception as e:
                 consecutive_failures += 1
-                print(f"Error capturing/processing frame: {str(e)}")
+                print(f"Error capturing/processing frame: {str(e)}", flush=True)
                 if consecutive_failures >= max_consecutive_failures:
-                    print(f"Too many consecutive failures ({consecutive_failures}). Stopping.")
+                    print(f"Too many consecutive failures ({consecutive_failures}). Stopping.", flush=True)
                     break
                 time.sleep(0.5)  # Brief pause before retry
         
-        # Release camera
-        self.camera.release()
-        cv2.destroyAllWindows()
-    
+        self._cleanup()
+
+    def _cleanup(self):
+        """Clean up resources"""
+        print("Cleaning up resources...", flush=True)
+        if hasattr(self, 'camera'):
+            try:
+                self.camera.release()
+            except Exception as e:
+                print(f"Error releasing camera: {e}", flush=True)
+        
+        if not self.headless:
+            try:
+                cv2.destroyAllWindows()
+            except Exception as e:
+                print(f"Error closing windows: {e}", flush=True)
+        
+        print("Cleanup complete", flush=True)
+        
+          
     def _run_image_mode(self):
         """Run facial recognition on a single image"""
         frame = cv2.imread(self.input_image)
@@ -348,10 +391,7 @@ class FacialRecognition:
                 self._run_camera_mode()
             else:
                 self._run_image_mode()
-                    
-        except KeyboardInterrupt:
-            print("\nStopping facial recognition...")
+        except Exception as e:
+            print(f"Error in main loop: {str(e)}", flush=True)
         finally:
-            cv2.destroyAllWindows()
-            if self.use_camera:
-                self.camera.release()
+            self._cleanup()
