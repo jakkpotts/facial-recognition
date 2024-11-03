@@ -9,7 +9,6 @@ I was planning, initially, on utilizing a Raspberry Pi Zero 2 W to run the softw
 The camera hardware implementation has been written as an abstract factory, so that essentially you can use any type of camera hardware and any OS as long as it supports python. Currently, Darwin (macOS) and Linux (specifically Raspberry Pi Zero 2 W) have implemented classes in the CameraFactory.
 
 ### dlib and pi02w 
-
 I have included steps in the installation instructions on how to build dlib with minimal requirements, as it was the only way I was able to get it installed.
 
 ## Linux Installation (Raspberry Pi Zero 2 W)
