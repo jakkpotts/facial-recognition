@@ -8,7 +8,7 @@ import hashlib
 import pickle
 from datetime import datetime
 from camera.camera_factory import CameraFactory
-from liveness_detector import LivenessDetector
+from enhanced_liveness_detector import EnhancedLivenessDetector
 
 class FacialRecognition:
     def __init__(self, known_faces_dir="known_faces", use_camera=True, input_image=None):
@@ -17,8 +17,14 @@ class FacialRecognition:
         self.known_faces_dir = known_faces_dir
         self.cache_file = os.path.join(known_faces_dir, "encodings_cache.pkl")
         self.metadata_file = os.path.join(known_faces_dir, "encodings_metadata.json")
-        self.liveness_detector = LivenessDetector()
+        self.liveness_detector = EnhancedLivenessDetector()
         
+        # Challenge tracking
+        self.current_challenge = None
+        self.challenge_start_time = None
+        self.challenge_display_duration = 15  # seconds to display challenge message
+        self.challenge_interval = 20  # seconds between challenges
+        self.last_challenge_time = time.time() - self.challenge_interval  # Allow immediate first challenge
         
         # Initialize camera if needed
         if self.use_camera:
@@ -33,10 +39,10 @@ class FacialRecognition:
         # Initialize known faces
         self.known_face_encodings = []
         self.known_face_names = []
-        self.load_known_faces(known_faces_dir)
+        self.load_known_faces(self.known_faces_dir)
         
         # Performance settings
-        self.process_every_n_frames = 3
+        self.process_every_n_frames = 1
         self.frame_count = 0
         self.recognition_threshold = 0.6
         
@@ -111,7 +117,8 @@ class FacialRecognition:
                     self.known_face_encodings = cache_data['encodings']
                     self.known_face_names = cache_data['names']
                 print(f"Successfully loaded {len(self.known_face_names)} people from cache")
-                print("Known people:", ', '.join(self.known_face_names))
+                if self.known_face_names:
+                    print("Known people:", ', '.join(self.known_face_names))
                 return
             except Exception as e:
                 print(f"Error loading cache: {e}")
@@ -177,38 +184,58 @@ class FacialRecognition:
                 print(f"No valid face encodings found for {person_name}")
         
         # Save the cache and metadata
-        try:
-            cache_data = {
-                'encodings': self.known_face_encodings,
-                'names': self.known_face_names
-            }
-            with open(self.cache_file, 'wb') as f:
-                pickle.dump(cache_data, f)
-            
-            with open(self.metadata_file, 'w') as f:
-                json.dump(metadata, f)
-            
-            print("\nCache saved successfully")
-        except Exception as e:
-            print(f"Error saving cache: {e}")
+        if self.known_face_encodings:
+            try:
+                cache_data = {
+                    'encodings': self.known_face_encodings,
+                    'names': self.known_face_names
+                }
+                with open(self.cache_file, 'wb') as f:
+                    pickle.dump(cache_data, f)
+                
+                with open(self.metadata_file, 'w') as f:
+                    json.dump(metadata, f)
+                
+                print("\nCache saved successfully")
+            except Exception as e:
+                print(f"Error saving cache: {e}")
         
         print(f"\nTotal people loaded: {len(self.known_face_names)}")
-        print("Known people:", ', '.join(self.known_face_names))
-    
-def process_frame(self, frame):
-    """Process a single frame for face detection and recognition"""
-    # Convert from BGR to RGB
-    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    
-    # Find faces in frame
-    face_locations = face_recognition.face_locations(rgb_frame)
-    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-    
-    for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-        # Check liveness for each detected face
-        liveness_result = self.liveness_detector.check_liveness(frame, (top, right, bottom, left))
+        if self.known_face_names:
+            print("Known people:", ', '.join(self.known_face_names))
+
+    def process_frame(self, frame):
+        """Process a single frame for face detection and recognition with liveness challenges"""
+        # Convert from BGR to RGB
+        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-        if liveness_result['is_live']:
+        # Find faces in frame
+        face_locations = face_recognition.face_locations(rgb_frame)
+        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+        
+        # Challenge management
+        current_time = time.time()
+        
+        # Generate new challenge if needed
+        if (not self.liveness_detector.challenge_active and 
+            current_time - self.last_challenge_time >= self.challenge_interval):
+            self.current_challenge = self.liveness_detector.generate_challenge()
+            self.challenge_start_time = current_time
+            self.last_challenge_time = current_time
+            print(f"\nNew Challenge: {self.current_challenge['type'].replace('_', ' ').title()}")
+        
+        # Display challenge message on frame if within display duration
+        if (self.challenge_start_time and 
+            current_time - self.challenge_start_time < self.challenge_display_duration):
+            challenge_text = f"Please {self.current_challenge['type'].replace('_', ' ')}"
+            cv2.putText(frame, challenge_text, (10, 30),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.7, (0, 255, 0), 1)
+        
+        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+            # Check liveness
+            liveness_result = self.liveness_detector.check_liveness(frame, (top, right, bottom, left))
+            liveness_confidence = liveness_result['confidence']
+            
             # Get face distances to known faces
             face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
             name = "Unknown"
@@ -220,27 +247,46 @@ def process_frame(self, frame):
                     name = self.known_face_names[best_match_index]
                     confidence = round((1 - face_distances[best_match_index]) * 100, 1)
 
-            # Draw rectangle and name with confidence
-            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-            cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0), cv2.FILLED)
-            label = f"{name} ({confidence}%)" if name != "Unknown" else name
-            cv2.putText(frame, label, (left + 6, bottom - 6),
-                        cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+            # Determine box color based on liveness and challenge completion
+            if liveness_result['checks'].get('challenge_completed', False):
+                box_color = (0, 255, 0)  # Green for challenge completed
+            elif liveness_result['is_live']:
+                box_color = (255, 165, 0)  # Orange for live but challenge not completed
+            else:
+                box_color = (0, 0, 255)  # Red for not live
 
-            # Log recognition
+            # Draw rectangle and labels
+            cv2.rectangle(frame, (left, top), (right, bottom), box_color, 2)
+            
+            # Create background for text
+            cv2.rectangle(frame, (left, bottom - 60), (right, bottom), box_color, cv2.FILLED)
+            
+            # Add name and confidence
+            label = f"{name} ({confidence}%)" if name != "Unknown" else name
+            cv2.putText(frame, label, (left + 6, bottom - 36),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+            
+            # Add liveness confidence
+            liveness_label = f"Liveness: {liveness_confidence}%"
+            cv2.putText(frame, liveness_label, (left + 6, bottom - 10),
+                       cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+
+            # Log recognition with enhanced information
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if name != "Unknown":
-                print(f"[{timestamp}] Detected: {name} (Confidence: {confidence}%)")
+                status = "✓ Challenge Complete" if liveness_result['checks'].get('challenge_completed', False) else "⋯ Challenge Pending"
+                print(f"[{timestamp}] Detected: {name} (Confidence: {confidence}%) –– "
+                      f"Liveness: {liveness_confidence}% –– {status}")
+                
+                # Print detailed liveness checks if confidence is low or verification fails
+                if liveness_confidence < 75:
+                    print("Liveness Check Details:")
+                    for check, result in liveness_result['checks'].items():
+                        print(f"  - {check.replace('_', ' ').title()}: {'Pass' if result else 'Fail'}")
             else:
                 print(f"[{timestamp}] Unknown Face Detected, No Match Found")
-
-        else:
-            # Mark as potential spoofing attempt
-            cv2.putText(frame, f"Spoof Detected ({liveness_result['confidence']:.1f}%)", 
-                        (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-
-    return frame
-
+            
+        return frame
     
     def _run_camera_mode(self):
         """Run facial recognition in camera mode"""
@@ -274,26 +320,23 @@ def process_frame(self, frame):
                     print(f"Too many consecutive failures ({consecutive_failures}). Stopping.")
                     break
                 time.sleep(0.5)  # Brief pause before retry
-     # Release camera
+        
+        # Release camera
         self.camera.release()
         cv2.destroyAllWindows()
     
     def _run_image_mode(self):
         """Run facial recognition on a single image"""
-        # Load and process the image
         frame = cv2.imread(self.input_image)
         if frame is None:
             raise ValueError(f"Could not load image: {self.input_image}")
         
-        # Process the image
         processed_frame = self.process_frame(frame)
         
-        # Display result and wait for key press
         cv2.imshow('Facial Recognition', processed_frame)
         print("\nPress any key to exit...")
         cv2.waitKey(0)
         
-        # Save the processed image
         output_path = f"processed_{os.path.basename(self.input_image)}"
         cv2.imwrite(output_path, processed_frame)
         print(f"\nProcessed image saved as: {output_path}")
