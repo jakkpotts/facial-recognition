@@ -8,6 +8,7 @@ import hashlib
 import pickle
 from datetime import datetime
 from camera.camera_factory import CameraFactory
+from liveness_detector import LivenessDetector
 
 class FacialRecognition:
     def __init__(self, known_faces_dir="known_faces", use_camera=True, input_image=None):
@@ -16,6 +17,8 @@ class FacialRecognition:
         self.known_faces_dir = known_faces_dir
         self.cache_file = os.path.join(known_faces_dir, "encodings_cache.pkl")
         self.metadata_file = os.path.join(known_faces_dir, "encodings_metadata.json")
+        self.liveness_detector = LivenessDetector()
+        
         
         # Initialize camera if needed
         if self.use_camera:
@@ -192,44 +195,52 @@ class FacialRecognition:
         print(f"\nTotal people loaded: {len(self.known_face_names)}")
         print("Known people:", ', '.join(self.known_face_names))
     
-    def process_frame(self, frame):
-        """Process a single frame for face detection and recognition"""
-        # Convert from BGR to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+def process_frame(self, frame):
+    """Process a single frame for face detection and recognition"""
+    # Convert from BGR to RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    
+    # Find faces in frame
+    face_locations = face_recognition.face_locations(rgb_frame)
+    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+    
+    for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+        # Check liveness for each detected face
+        liveness_result = self.liveness_detector.check_liveness(frame, (top, right, bottom, left))
         
-        # Find faces in frame
-        face_locations = face_recognition.face_locations(rgb_frame)
-        face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
-        
-        # Process each face found
-        for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+        if liveness_result['is_live']:
             # Get face distances to known faces
             face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
-            
             name = "Unknown"
             confidence = 0
-            
+
             if len(face_distances) > 0:
                 best_match_index = np.argmin(face_distances)
                 if face_distances[best_match_index] <= self.recognition_threshold:
                     name = self.known_face_names[best_match_index]
                     confidence = round((1 - face_distances[best_match_index]) * 100, 1)
-            
+
             # Draw rectangle and name with confidence
             cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
             cv2.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0), cv2.FILLED)
             label = f"{name} ({confidence}%)" if name != "Unknown" else name
             cv2.putText(frame, label, (left + 6, bottom - 6),
-                       cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
-            
+                        cv2.FONT_HERSHEY_DUPLEX, 0.6, (255, 255, 255), 1)
+
             # Log recognition
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             if name != "Unknown":
                 print(f"[{timestamp}] Detected: {name} (Confidence: {confidence}%)")
             else:
                 print(f"[{timestamp}] Unknown Face Detected, No Match Found")
-        
-        return frame
+
+        else:
+            # Mark as potential spoofing attempt
+            cv2.putText(frame, f"Spoof Detected ({liveness_result['confidence']:.1f}%)", 
+                        (left, top - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+    return frame
+
     
     def _run_camera_mode(self):
         """Run facial recognition in camera mode"""
@@ -263,6 +274,9 @@ class FacialRecognition:
                     print(f"Too many consecutive failures ({consecutive_failures}). Stopping.")
                     break
                 time.sleep(0.5)  # Brief pause before retry
+     # Release camera
+        self.camera.release()
+        cv2.destroyAllWindows()
     
     def _run_image_mode(self):
         """Run facial recognition on a single image"""
