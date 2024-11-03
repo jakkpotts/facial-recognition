@@ -12,7 +12,7 @@ from camera.camera_factory import CameraFactory
 from enhanced_liveness_detector import EnhancedLivenessDetector
 
 class FacialRecognition:
-    def __init__(self, known_faces_dir="known_faces", use_camera=True, input_image=None):
+    def __init__(self, known_faces_dir="known_faces", use_camera=True, input_image=None, headless=False):
         self.use_camera = use_camera
         self.input_image = input_image
         self.known_faces_dir = known_faces_dir
