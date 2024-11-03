@@ -36,6 +36,14 @@ Run the following commands before installing the Python package requirements:
     cd dlib
     python3 setup.py install --no DLIB_USE_CUDA  
 
+# Remove swapfile
+
+    sudo swapoff -a
+    sudo rm /swapfile
+    sudo nano /etc/fstab
+    free -h
+    
+
 # Install the required Python packages
 
     pip3 install -r requirements.txt  
