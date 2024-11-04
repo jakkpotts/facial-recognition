@@ -16,6 +16,10 @@ class ArducamCamera(CameraInterface):
         for attempt in range(self.initialization_retries):
             try:
                 self.camera = self.Picamera2()
+                 # Configure for RGB capture
+                config = self.camera.create_preview_configuration(
+                    main={"format": "RGB888", "size": (1280, 720)}
+                )
                 config = self.camera.create_preview_configuration(main={"size": (1280, 720)})
                 self.camera.configure(config)
                 self.camera.start()
@@ -23,6 +27,11 @@ class ArducamCamera(CameraInterface):
                 test_frame = self.camera.capture_array()
                 if test_frame is None or test_frame.size == 0:
                     raise RuntimeError("Camera started but cannot capture frames")
+                
+                 # Verify correct format
+                if len(test_frame.shape) != 3 or test_frame.shape[2] != 3:
+                    raise RuntimeError("Camera not capturing in correct RGB format")
+                
                 
                 print("Arducam camera initialized successfully")
                 return
@@ -46,8 +55,8 @@ class ArducamCamera(CameraInterface):
         if frame is None or frame.size == 0:
             raise RuntimeError("Failed to capture valid frame")
         
-        if len(frame.shape) != 3:
-            raise ValueError("Invalid frame format: not a color image")
+        if len(frame.shape) != 3 or frame.shape[2] != 3:
+            raise ValueError("Invalid frame format: not an RGB image")
         
         return frame
     
