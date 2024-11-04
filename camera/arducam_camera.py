@@ -1,37 +1,34 @@
 import time
+import numpy as np
+import libcamera
+from libcamera import Transform
 from .camera_interface import CameraInterface
 
 class ArducamCamera(CameraInterface):
-    """Implementation for Arducam on Pi Zero 2"""
+    """Implementation for Arducam on Pi Zero 2 using libcamera"""
     def __init__(self):
-        try:
-            from picamera2 import Picamera2
-            self.Picamera2 = Picamera2
-        except ImportError:
-            raise ImportError("picamera2 module not found. Required for Arducam on Pi Zero 2")
         self.camera = None
+        self.camera_config = None
+        self.stream = None
         self.initialization_retries = 3
-    
+
     def initialize(self):
         for attempt in range(self.initialization_retries):
             try:
-                self.camera = self.Picamera2()
-                 # Configure for RGB capture
-                config = self.camera.create_preview_configuration(
-                    main={"format": "RGB888", "size": (1280, 720)}
-                )
-                self.camera.configure(config)
+                self.camera = libcamera.Camera(libcamera.CameraManager().get_all_cameras()[0])
+                self.camera_config = self.camera.generate_configuration(["main"])
+                self.camera_config.transform = Transform(hflip=1, vflip=1)
+                self.camera_config.main.size = libcamera.Size(1280, 720)
+                self.camera_config.main.pixel_format = libcamera.PixelFormat("RGB888")
+                self.camera.configure(self.camera_config)
+                self.stream = self.camera_config.main.stream
                 self.camera.start()
-                
-                test_frame = self.camera.capture_array()
+
+                # Verify frame capture
+                test_frame = self.capture_frame()
                 if test_frame is None or test_frame.size == 0:
                     raise RuntimeError("Camera started but cannot capture frames")
-                
-                 # Verify correct format
-                if len(test_frame.shape) != 3 or test_frame.shape[2] != 3:
-                    raise RuntimeError("Camera not capturing in correct RGB format")
-                
-                
+
                 print("Arducam camera initialized successfully")
                 return
             except Exception as e:
@@ -45,21 +42,21 @@ class ArducamCamera(CameraInterface):
                     time.sleep(1)
                 else:
                     raise RuntimeError("Failed to initialize camera after multiple attempts")
-    
+
     def capture_frame(self):
-        if not self.camera:
+        if not self.camera or not self.stream:
             raise RuntimeError("Camera is not initialized")
-        
-        frame = self.camera.capture_array()
-        if frame is None or frame.size == 0:
-            raise RuntimeError("Failed to capture valid frame")
-        
-        if len(frame.shape) != 3 or frame.shape[2] != 3:
-            raise ValueError("Invalid frame format: not an RGB image")
-        
+
+        buffer = self.stream.acquire_buffer()
+        if buffer is None:
+            raise RuntimeError("Failed to acquire buffer from camera stream")
+
+        frame = np.array(buffer.planes[0])
+        buffer.release()
         return frame
-    
+
     def release(self):
         if self.camera:
             self.camera.stop()
             self.camera = None
+            self.stream = None
