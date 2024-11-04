@@ -27,10 +27,10 @@ class FacialRecognition:
         signal.signal(signal.SIGTERM, self._signal_handler)
         
         # Performance settings
-        self.process_every_n_frames = 2  # Process every other frame
+        self.process_every_n_frames = 1  # Process every frame
         self.frame_count = 0
         self.recognition_threshold = 0.6
-        self.target_fps = 10
+        self.target_fps = 30
         self.frame_time = 1.0 / self.target_fps
         
         # Challenge tracking

@@ -12,7 +12,7 @@ class EnhancedLivenessDetector:
                  blink_threshold: float = 0.3,
                  blink_consec_frames: int = 3,
                  movement_threshold: float = 1.5,
-                 texture_threshold: float = 30):
+                 texture_threshold: float = 25):
         """
         Enhanced liveness detector with multiple anti-spoofing techniques.
         """

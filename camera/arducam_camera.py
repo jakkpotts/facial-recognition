@@ -20,7 +20,6 @@ class ArducamCamera(CameraInterface):
                 config = self.camera.create_preview_configuration(
                     main={"format": "RGB888", "size": (1280, 720)}
                 )
-                config = self.camera.create_preview_configuration(main={"size": (1280, 720)})
                 self.camera.configure(config)
                 self.camera.start()
                 
