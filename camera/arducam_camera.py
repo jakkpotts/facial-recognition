@@ -1,13 +1,16 @@
 import time
 import numpy as np
+import subprocess
 from picamera2 import Picamera2
 from .camera_interface import CameraInterface
 
 class ArducamCamera(CameraInterface):
-    """Implementation for Arducam on Pi Zero 2 using Picamera2"""
-    def __init__(self):
+    """Implementation for Arducam on Pi Zero 2 using Picamera2 with preview support"""
+    def __init__(self, preview=False):
         self.camera = None
         self.initialization_retries = 3
+        self.preview = preview
+        self.preview_process = None
 
     def initialize(self):
         for attempt in range(self.initialization_retries):
@@ -26,6 +29,22 @@ class ArducamCamera(CameraInterface):
                 
                 # Start the camera
                 self.camera.start()
+                
+                # Start preview if requested
+                if self.preview:
+                    try:
+                        # Kill any existing preview processes
+                        subprocess.run(['pkill', 'libcamera-hello'], stderr=subprocess.DEVNULL)
+                        # Start preview in background
+                        self.preview_process = subprocess.Popen(
+                            ['libcamera-hello', '-t', '0'],  # Run indefinitely
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL
+                        )
+                        print("Preview started - use Ctrl+C to stop")
+                    except Exception as e:
+                        print(f"Warning: Could not start preview: {e}")
+                        self.preview = False
                 
                 # Wait for camera to warm up
                 time.sleep(0.5)
@@ -64,6 +83,16 @@ class ArducamCamera(CameraInterface):
             return None
 
     def release(self):
+        if self.preview_process:
+            try:
+                self.preview_process.terminate()
+                self.preview_process.wait(timeout=1)
+            except:
+                try:
+                    self.preview_process.kill()
+                except:
+                    pass
+                
         if self.camera:
             try:
                 self.camera.stop()

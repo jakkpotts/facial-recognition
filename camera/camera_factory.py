@@ -6,7 +6,7 @@ from .arducam_camera import ArducamCamera
 class CameraFactory:
     """Factory class to create appropriate camera instance based on platform"""
     @staticmethod
-    def create_camera():
+    def create_camera(preview=False):
         system = platform.system()
         machine = platform.machine()
         
@@ -16,6 +16,6 @@ class CameraFactory:
             with open("/proc/device-tree/model") as f:
                 model = f.read()
                 if "Raspberry Pi Zero 2" in model:
-                    return ArducamCamera()
+                    return ArducamCamera(preview=preview)
         
         raise RuntimeError(f"Unsupported platform: {system} {machine}")

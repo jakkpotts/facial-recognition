@@ -43,7 +43,7 @@ class FacialRecognition:
         # Initialize camera if needed
         if self.use_camera:
             try:
-                self.camera = CameraFactory.create_camera()
+                self.camera = CameraFactory.create_camera(preview = True) if not headless else CameraFactory.create_camera(preview = False) 
                 self.camera.initialize()
             except Exception as e:
                 raise RuntimeError(f"Failed to initialize camera: {str(e)}")
