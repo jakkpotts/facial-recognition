@@ -7,6 +7,7 @@ from .camera_interface import CameraInterface
 class ArducamCamera(CameraInterface):
     """Implementation for Arducam on Pi Zero 2 using libcamera"""
     def __init__(self):
+        self.camera_manager = libcamera.CameraManager()
         self.camera = None
         self.camera_config = None
         self.stream = None
@@ -15,13 +16,18 @@ class ArducamCamera(CameraInterface):
     def initialize(self):
         for attempt in range(self.initialization_retries):
             try:
-                self.camera = libcamera.Camera(libcamera.CameraManager().get_all_cameras()[0])
-                self.camera_config = self.camera.generate_configuration(["main"])
+                cameras = self.camera_manager.cameras
+                if not cameras:
+                    raise RuntimeError("No cameras available")
+
+                self.camera = cameras[0]
+                self.camera.acquire()
+                self.camera_config = self.camera.generate_configuration(["viewfinder"])
                 self.camera_config.transform = Transform(hflip=1, vflip=1)
-                self.camera_config.main.size = libcamera.Size(1280, 720)
-                self.camera_config.main.pixel_format = libcamera.PixelFormat("RGB888")
+                self.camera_config[0].size = (1280, 720)
+                self.camera_config[0].pixel_format = "RGB888"
+                
                 self.camera.configure(self.camera_config)
-                self.stream = self.camera_config.main.stream
                 self.camera.start()
 
                 # Verify frame capture
@@ -36,6 +42,7 @@ class ArducamCamera(CameraInterface):
                 if self.camera:
                     try:
                         self.camera.stop()
+                        self.camera.release()
                     except:
                         pass
                 if attempt < self.initialization_retries - 1:
@@ -47,16 +54,15 @@ class ArducamCamera(CameraInterface):
         if not self.camera or not self.stream:
             raise RuntimeError("Camera is not initialized")
 
-        buffer = self.stream.acquire_buffer()
-        if buffer is None:
-            raise RuntimeError("Failed to acquire buffer from camera stream")
-
-        frame = np.array(buffer.planes[0])
-        buffer.release()
-        return frame
+        request = self.camera.capture_request()
+        buffer = request.buffers[self.stream]
+        data = np.array(buffer.planes[0].data, dtype=np.uint8).reshape((720, 1280, 3))  # Adjust size if necessary
+        request.release()
+        return data
 
     def release(self):
         if self.camera:
             self.camera.stop()
+            self.camera.release()
             self.camera = None
             self.stream = None
