@@ -32,21 +32,9 @@ Run the following commands before installing the Python package requirements:
 
     pip3 install numpy
 
-## If installing on a Raspberry Pi Zero 2 (W), install picamera2
+## If installing on a Raspberry Pi Zero 2 (W), install libcamera
 
-    pip install picamera2
-
-    pip install libcamera-dev jinja2 ply pyyaml
-
-    git clone https://github.com/raspberrypi/libcamera.git
-    cd libcamera
-    git checkout v0.3.1+rpt20240906
-    meson setup build
-    meson compile -C build
-    sudo meson install -C build
-
-
-    pip install rpi-libcamera
+    sudo apt install libcamera0
 
 ## Increase swapfile space to prevent out-of-memory issues from dlib installation
 
