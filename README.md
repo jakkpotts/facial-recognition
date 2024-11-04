@@ -30,11 +30,11 @@ Run the following commands before installing the Python package requirements:
 
 ## Install numpy first
 
-    pip3 install numpy
+    pip install numpy
 
 ## If installing on a Raspberry Pi Zero 2 (W), install libcamera
 
-    sudo apt install libcamera0
+    sudo apt install python3-libcamera
 
 ## Increase swapfile space to prevent out-of-memory issues from dlib installation
 
@@ -58,14 +58,11 @@ Edit fstab with `sudo nano /etc/fstab` and look for the line that contains `swap
 
 Double check the swapfile has been removed with `free -h`
 
+## Create virtual environment
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+
 ## Install the required Python packages
 
-    pip3 install -r requirements.txt  
-
-## Create symlinks to the system python packages that we need to use in our virutal environment
-
-    sudo ln -s /usr/lib/python3/dist-packages/libcamera* .venv/lib/python3.11/site-packages/
-    sudo ln -s /usr/lib/python3/dist-packages/picamera2* .venv/lib/python3.11/site-packages/
-    sudo ln -s /usr/lib/python3/dist-packages/pykms* .venv/lib/python3.11/site-packages/
-    sudo ln -s /usr/lib/python3/dist-packages/kms* .venv/lib/python3.11/site-packages/
-    sudo ln -s /usr/lib/python3/dist-packages/_pykms* .venv/lib/python3.11/site-packages/
+    pip install -r requirements.txt  
