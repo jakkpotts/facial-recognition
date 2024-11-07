@@ -8,3 +8,4 @@
 /shape_predictor_68_face_landmarks.dat
 .DS_Store
 .env
+camera/__pycache__
