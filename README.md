@@ -34,7 +34,7 @@ Run the following commands before installing the Python package requirements:
 
 ## If installing on a Raspberry Pi Zero 2 (W), install libcamera
 
-    sudo apt install libcamera-dev libcamera-apps python3-libcamera python3-picamera2
+    sudo apt install libcamera-dev libcamera-apps python3-libcamera python3-picamera2 x11-apps
 
 ## Increase swapfile space to prevent out-of-memory issues from dlib installation
 
