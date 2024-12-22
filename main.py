@@ -27,7 +27,9 @@ def main():
             facial_recognition = FacialRecognition(
                 use_camera=False,
                 headless=True,
-                disable_liveness=True
+                disable_liveness=True,
+                known_faces_dir=args.known_faces_dir,
+                input_image=None
             )
             
             result = facial_recognition.compare_faces(args.compare[0], args.compare[1])

@@ -29,9 +29,9 @@ class FacialRecognition:
         signal.signal(signal.SIGTERM, self._signal_handler)
         
         # Performance settings
-        self.process_every_n_frames = 6  # increase for slower systems
+        self.process_every_n_frames = 1  # increase for slower systems
         self.frame_count = 0
-        self.recognition_threshold = 0.6
+        self.recognition_threshold = 0.6   # 40% similarity
         self.target_fps = 30
         self.frame_time = 1.0 / self.target_fps
         self.display_scale = 1  # decrease for slower systems
@@ -50,7 +50,8 @@ class FacialRecognition:
                 self.camera.initialize()
             except Exception as e:
                 raise RuntimeError(f"Failed to initialize camera: {str(e)}")
-        elif not os.path.exists(input_image):
+        # Only check for input image if we're not using camera and not in comparison mode
+        elif not self.use_camera and input_image is not None and not os.path.exists(input_image):
             raise FileNotFoundError(f"Input image not found: {input_image}")
         
         # Initialize known faces
@@ -127,9 +128,17 @@ class FacialRecognition:
             return
         
         needs_update, changed_files = self._should_rebuild_cache(base_directory)
+        metadata = {}  # Initialize metadata here
         
-        # Load existing cache if available
-        if os.path.exists(self.cache_file) and os.path.exists(self.metadata_file):
+        # If cache files don't exist, process all files
+        if not os.path.exists(self.cache_file) or not os.path.exists(self.metadata_file):
+            print("No cache found. Building new cache...")
+            changed_files = self._get_directory_metadata(base_directory)
+            needs_update = True
+            self.known_face_encodings = []
+            self.known_face_names = []
+        # Try to load existing cache
+        else:
             try:
                 print("Loading existing face encodings from cache...")
                 with open(self.cache_file, 'rb') as f:
@@ -148,6 +157,7 @@ class FacialRecognition:
                     
             except Exception as e:
                 print(f"Error loading cache: {e}")
+                print("Rebuilding cache from scratch...")
                 needs_update = True
                 changed_files = self._get_directory_metadata(base_directory)
                 self.known_face_encodings = []
