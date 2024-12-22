@@ -14,13 +14,31 @@ def main():
                        help='Run in headless mode without GUI')
     parser.add_argument('--disable-liveness', action='store_true',
                        help='Disable liveness detection')
+    parser.add_argument('--compare', nargs=2, metavar=('IMAGE1', 'IMAGE2'),
+                       help='Compare two images to check if they contain the same person')
+    
     args = parser.parse_args()
     
     try:
         print("Starting Facial Recognition System...", flush=True)
         
+        # Handle face comparison mode
+        if args.compare:
+            facial_recognition = FacialRecognition(
+                use_camera=False,
+                headless=True,
+                disable_liveness=True
+            )
+            
+            result = facial_recognition.compare_faces(args.compare[0], args.compare[1])
+            if result['match']:
+                print(f"\nMatch found! Similarity: {result['similarity']}%")
+            else:
+                print(f"\nNo match. Similarity: {result['similarity']}%")
+            return
+        
+        # Normal operation mode
         use_camera = args.image is None
-
         facial_recognition = FacialRecognition(
             known_faces_dir=args.known_faces_dir,
             use_camera=use_camera,
@@ -29,6 +47,7 @@ def main():
             disable_liveness=args.disable_liveness
         )
         facial_recognition.run()
+        
     except Exception as e:
         print(f"Error: {str(e)}", flush=True)
         sys.exit(1)

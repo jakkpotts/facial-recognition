@@ -251,13 +251,15 @@ class FacialRecognition:
             top, right, bottom, left = result['location']
             liveness_result = result['liveness_result']
             
-            # Determine box color based on liveness and challenge completion
-            if self.disable_liveness or liveness_result['checks'].get('challenge_completed', False):
-                box_color = (0, 255, 0)  # Green
+            # Determine box color based on recognition and liveness
+            if result['name'] == "Unknown":
+                box_color = (0, 0, 255)  # Red for unrecognized faces
+            elif self.disable_liveness or liveness_result['checks'].get('challenge_completed', False):
+                box_color = (0, 255, 0)  # Green for recognized + liveness passed
             elif liveness_result['is_live']:
-                box_color = (255, 165, 0)  # Orange
+                box_color = (255, 165, 0)  # Orange for recognized + partial liveness
             else:
-                box_color = (0, 0, 255)  # Red
+                box_color = (0, 0, 255)  # Red for recognized but failed liveness
             
             # Draw rectangle and labels
             cv2.rectangle(frame, (left, top), (right, bottom), box_color, 2)
@@ -378,3 +380,42 @@ class FacialRecognition:
             print(f"Error in main loop: {str(e)}", flush=True)
         finally:
             self._cleanup()
+
+    def compare_faces(self, image1_path, image2_path):
+        """Compare two face images and determine if they are the same person"""
+        try:
+            # Load and encode the first image
+            image1 = face_recognition.load_image_file(image1_path)
+            image1_encoding = face_recognition.face_encodings(image1)
+            
+            if not image1_encoding:
+                raise ValueError(f"No face found in first image: {image1_path}")
+            
+            # Load and encode the second image
+            image2 = face_recognition.load_image_file(image2_path)
+            image2_encoding = face_recognition.face_encodings(image2)
+            
+            if not image2_encoding:
+                raise ValueError(f"No face found in second image: {image2_path}")
+            
+            # Compare the faces
+            results = face_recognition.compare_faces(
+                [image1_encoding[0]], 
+                image2_encoding[0], 
+                tolerance=self.recognition_threshold
+            )
+            
+            # Calculate similarity percentage
+            face_distance = face_recognition.face_distance(
+                [image1_encoding[0]], 
+                image2_encoding[0]
+            )[0]
+            similarity = round((1 - face_distance) * 100, 2)
+            
+            return {
+                'match': results[0],
+                'similarity': similarity
+            }
+            
+        except Exception as e:
+            raise RuntimeError(f"Error comparing faces: {str(e)}")
