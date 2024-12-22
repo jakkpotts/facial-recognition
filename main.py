@@ -12,17 +12,21 @@ def main():
                        help='Directory containing known faces (default: known_faces)')
     parser.add_argument('--headless', action='store_true',
                        help='Run in headless mode without GUI')
+    parser.add_argument('--disable-liveness', action='store_true',
+                       help='Disable liveness detection')
     args = parser.parse_args()
     
     try:
         print("Starting Facial Recognition System...", flush=True)
         
         use_camera = args.image is None
+
         facial_recognition = FacialRecognition(
             known_faces_dir=args.known_faces_dir,
             use_camera=use_camera,
             input_image=args.image,
-            headless=args.headless
+            headless=args.headless,
+            disable_liveness=args.disable_liveness
         )
         facial_recognition.run()
     except Exception as e:
