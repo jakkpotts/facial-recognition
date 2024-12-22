@@ -361,10 +361,12 @@ class FacialRecognition:
         print("\nPress any key to exit...")
         cv2.waitKey(0)
         
+        ''' I'm not so sure about the neccessity of this, but it's here just in case
         output_path = f"processed_{os.path.basename(self.input_image)}"
         cv2.imwrite(output_path, processed_frame)
         print(f"\nProcessed image saved as: {output_path}")
-    
+        '''
+
     def run(self):
         """Main loop for facial recognition"""
         try:
